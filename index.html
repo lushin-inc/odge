@@ -222,6 +222,28 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 .bkpaste textarea{width:100%;min-height:90px;border:1px solid var(--line);border-radius:9px;background:var(--bg);
   color:var(--text);font:13px/1.4 ui-monospace,Menlo,monospace;padding:9px}
 .bkmsg{margin-top:9px;font-size:13px;color:var(--accent);min-height:1em}
+.fhead{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.exlink{font-size:13px;color:var(--muted);text-decoration:underline;text-underline-offset:3px;padding:4px 2px}
+.exlink:hover{color:var(--accent)}
+.fplayer .prow{gap:14px}
+.fnow{flex:1;min-width:0}
+.fnow b{display:block;font-size:15px;font-weight:600;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fnow span{display:block;font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fgrp{padding:18px 0 4px}
+.fghead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.fghead b{display:block;font-size:16px;font-weight:600;line-height:1.35}
+.fghead span{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.fgplay{flex:0 0 auto;font-size:13px;font-weight:500;color:var(--accent);padding:6px 13px;border-radius:999px;background:var(--accq)}
+.fgrp .fcard{border-top:0;border-bottom:1px solid var(--line);padding:12px 10px;margin:0 -10px;border-radius:0;transition:background .15s ease}
+.fcard.on{background:var(--accq);border-radius:10px;border-bottom-color:transparent}
+.fopen{font-size:13px;color:var(--accent);padding:6px 4px}
+.fgrp .ftx{display:block;width:100%;text-align:left}
+.upnext{position:fixed;left:50%;transform:translateX(-50%);z-index:60;width:min(92vw,520px);
+  bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--field);border:1px solid var(--accent);
+  border-radius:14px;padding:12px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;
+  box-shadow:0 6px 22px rgba(0,0,0,.35);font-size:14px}
+.upnext span{flex:1 1 100%}
+.upnext button{font-size:13px;font-weight:500;color:var(--accent);padding:6px 13px;border-radius:999px;background:var(--accq)}
 </style>
 </head><body>
 <div class="top"><div class="topin">
@@ -510,6 +532,7 @@ function recordPos(){
   lastSaved = t; savePos();
 }
 function stopAudio(){
+  if (typeof stopFav === 'function') stopFav();
   session++;
   if (audio){ recordPos(); audio.pause(); audio.removeAttribute('src'); audio.load(); }
   audio = null; rows = []; nodes = []; active = -1; curRec = null; curData = null; dur = 0;
@@ -814,36 +837,177 @@ function favsView(){
   stopAudio();
   listHash = '#favs';
   setNav('#', 'Home');
-  const list = [...favs].sort((a, b) => b.w - a.w);
-  let html = '<div class="fhead"><h1>Favorites</h1></div>' +
-    '<div class="bk"><p>Favorites and listened sessions are saved in this browser only. To carry them to another ' +
-    'device, export a backup here and import it there. Send the backup file to Claude to build them into the page ' +
-    'permanently.</p><div class="bkrow"><button id="bkexp">Export backup</button><button id="bkcopy">Copy as text</button>' +
-    '<button id="bkimp">Import backup file</button><button id="bkpastebtn">Paste backup text</button></div>' +
-    '<input type="file" id="bkfile" accept=".json,application/json,text/plain" hidden>' +
-    '<div class="bkpaste" id="bkpaste"><textarea id="bktext" placeholder="Paste the backup text here"></textarea>' +
-    '<div class="bkrow" style="margin-top:8px"><button id="bkpastego">Import pasted text</button></div></div>' +
-    '<div class="bkmsg" id="bkmsg"></div></div>';
-  if (!list.length){
-    html += '<div class="note">Nothing saved yet. Tap the heart beside any line in a transcript, or any section in an outline.</div>';
-  } else {
-    html += '<div class="feed">' + list.map(f => {
-      const r = byId[f.i];
-      return '<div class="fcard"><div class="fsrc">' + esc(r ? r.t + ' · ' + r.dt : 'Session ' + f.i) +
-        (f.kind === 'o' ? ' · Outline' : '') + '</div>' +
-        '<div class="ftx' + (f.kind === 'o' ? ' sech' : '') + '">' + esc(f.x) + '</div>' +
-        '<div class="frow"><button class="fts" data-go="' + f.i + '/' + f.t + '">Play from ' + fmt(f.t) +
-        '</button><button class="fdel" data-drop="' + esc(f.k) + '">Remove</button></div></div>';
-    }).join('') + '</div>';
+  const g = favGroups();
+  let html = '<div class="fhead"><h1>Favorites</h1>' +
+    (favs.length ? '<button class="exlink" id="bkexp">Export</button>' : '') + '</div>';
+  if (!g.flat.length){
+    app.innerHTML = html + '<div class="note">Nothing saved yet. Tap the heart beside any line in a transcript, or any section in an outline.</div>';
+    wireExport();
+    return;
   }
+  html += '<div class="player fplayer"><div class="prow">' +
+      '<button class="play" id="fpp" aria-label="Play"><svg viewBox="0 0 24 24" id="fppi">' + ICO_PLAY + '</svg></button>' +
+      '<div class="fnow"><b id="fnowt">Play all ' + plural(g.flat.length, 'favorite') + ' in order</b>' +
+      '<span id="fnows">Or tap any favorite to start there</span></div></div>' +
+      '<div class="skips"><button id="fprev">Previous</button><button id="fnext">Next</button>' +
+      '<button id="fspd" class="spd">1×</button></div></div>';
+  html += '<div class="feed">';
+  let n = 0;
+  g.order.forEach(i => {
+    const r = byId[i], items = g.groups[i];
+    html += '<div class="fgrp"><div class="fghead"><div><b>' + esc(r.t) + '</b><span>' + esc(r.dt) + ' · ' +
+      plural(items.length, 'favorite') + '</span></div><button class="fgplay" data-fq="' + n + '">Play from here</button></div>';
+    items.forEach(f => {
+      html += '<div class="fcard" data-n="' + n + '">' +
+        '<button class="ftx' + (f.kind === 'o' ? ' sech' : '') + '" data-fq="' + n + '">' + esc(f.x) + '</button>' +
+        '<div class="frow"><button class="fts" data-fq="' + n + '">' + fmt(f.t) + '</button>' +
+        '<button class="fopen" data-go="' + f.i + '/' + f.t + '">Open in session</button>' +
+        '<button class="fdel" data-drop="' + esc(f.k) + '">Remove</button></div></div>';
+      n++;
+    });
+    html += '</div>';
+  });
+  html += '</div>';
   app.innerHTML = html;
   wireRows(app);
   app.querySelectorAll('[data-drop]').forEach(el => el.onclick = () => {
     favs = favs.filter(f => f.k !== el.dataset.drop); LS.set('de_favs', favs); favsView(); });
-  wireBackup();
+  app.querySelectorAll('[data-fq]').forEach(el => el.onclick = () => favPlay(+el.dataset.fq));
+  $('#fpp').onclick = () => {
+    if (!FQ.audio) return favPlay(0);
+    FQ.audio.paused ? FQ.audio.play().catch(() => {}) : FQ.audio.pause();
+  };
+  $('#fprev').onclick = () => favPlay(Math.max(0, (FQ.idx < 0 ? 0 : FQ.idx - 1)));
+  $('#fnext').onclick = () => { if (FQ.idx + 1 < FQ.list.length) favPlay(FQ.idx + 1); };
+  const sp = $('#fspd'), SPEEDS = [1, 1.25, 1.5, 1.75, 2];
+  sp.textContent = speed + '×';
+  sp.onclick = () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; LS.set('de_speed', speed);
+    sp.textContent = speed + '×'; if (FQ.audio) FQ.audio.playbackRate = speed; };
+  FQ.list = g.flat; FQ.idx = -1;
+  wireExport();
 }
 
-/* ---------- listened + backup ---------- */
+/* ---------- favorites: grouped by session (date order), each in the order it plays ---------- */
+function favGroups(){
+  const groups = {};
+  favs.forEach(f => { if (byId[f.i]) (groups[f.i] = groups[f.i] || []).push(f); });
+  const order = REC.filter(r => groups[r.i]).map(r => r.i);
+  const flat = [];
+  order.forEach(i => { groups[i].sort((a, b) => a.t - b.t); groups[i].forEach(f => flat.push(f)); });
+  return {order, groups, flat};
+}
+function favEnd(f){
+  const d = load(f.i); if (!d) return null;
+  const marks = f.kind === 'o' && d.o ? d.o.map(o => o.t) : d.s.map(s => s[0]);
+  const next = marks.find(t => t > f.t + 0.05);
+  return next != null ? next : (d.d || byId[f.i].d);
+}
+function srcsFor(r){
+  const s = [];
+  if (location.protocol === 'file:' && r.f) s.push('Essentials/' + r.f.split('/').map(encodeURIComponent).join('/'));
+  if (r.g) s.push('https://www.googleapis.com/drive/v3/files/' + r.g + '?alt=media&key=' + DKEY);
+  return s;
+}
+const FQ = {list: [], idx: -1, audio: null, file: null, end: null, gap: null};
+function stopFav(){
+  clearTimeout(FQ.gap);
+  if (FQ.audio){ FQ.audio.pause(); FQ.audio.removeAttribute('src'); FQ.audio.load(); }
+  FQ.audio = null; FQ.file = null; FQ.idx = -1; FQ.end = null;
+}
+function favShow(){
+  const f = FQ.list[FQ.idx];
+  document.querySelectorAll('.fcard.on').forEach(c => c.classList.remove('on'));
+  const c = f && document.querySelector('.fcard[data-n="' + FQ.idx + '"]');
+  if (c){ c.classList.add('on'); const rc = c.getBoundingClientRect();
+    if (rc.top < bandTop() || rc.bottom > innerHeight - 40) scrollTo({top: scrollY + rc.top - bandTop() - 20, behavior: 'smooth'}); }
+  const t = $('#fnowt'), s = $('#fnows');
+  if (t && f){ t.textContent = f.x; s.textContent = byId[f.i].t + ' · ' + fmt(f.t) + ' · ' + (FQ.idx + 1) + ' of ' + FQ.list.length; }
+  if (f && 'mediaSession' in navigator){
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({title: f.x, artist: 'Dodge', album: byId[f.i].t});
+      navigator.mediaSession.setActionHandler('nexttrack', () => { if (FQ.idx + 1 < FQ.list.length) favPlay(FQ.idx + 1); });
+      navigator.mediaSession.setActionHandler('previoustrack', () => favPlay(Math.max(0, FQ.idx - 1)));
+    } catch(e){}
+  }
+}
+function favPP(playing){
+  const pp = $('#fpp'); if (!pp) return;
+  pp.classList.toggle('playing', playing);
+  $('#fppi').innerHTML = playing ? ICO_PAUSE : ICO_PLAY;
+}
+function favPlay(n){
+  clearTimeout(FQ.gap);
+  const f = FQ.list[n]; if (!f) return;
+  FQ.idx = n; FQ.end = favEnd(f);
+  if (!FQ.audio){
+    const el = new Audio(); el.preload = 'auto'; FQ.audio = el;
+    el.addEventListener('timeupdate', () => { if (FQ.audio === el && FQ.end != null && el.currentTime >= FQ.end - 0.05) favAdvance(); });
+    el.addEventListener('ended', () => { if (FQ.audio === el) favAdvance(); });
+    el.addEventListener('play', () => favPP(true));
+    el.addEventListener('pause', () => favPP(false));
+    el.addEventListener('error', () => {
+      if (FQ.audio !== el || !FQ.srcs) return;
+      if (FQ.si + 1 < FQ.srcs.length){ FQ.si++; el.src = FQ.srcs[FQ.si]; FQ.seekTo = FQ.list[FQ.idx].t; return; }
+      const s = $('#fnows'); if (s) s.textContent = 'Audio could not be loaded';
+    });
+    el.addEventListener('loadedmetadata', () => {
+      if (FQ.audio !== el || FQ.seekTo == null) return;
+      try { el.currentTime = FQ.seekTo; } catch(e){}
+      FQ.seekTo = null; el.play().catch(() => {});
+    });
+  }
+  const el = FQ.audio;
+  el.playbackRate = speed;
+  if (FQ.file !== f.i){
+    FQ.file = f.i; FQ.srcs = srcsFor(byId[f.i]); FQ.si = 0; FQ.seekTo = f.t;
+    el.src = FQ.srcs[0];
+    el.play().catch(() => {});
+  } else {
+    try { el.currentTime = f.t; } catch(e){}
+    el.play().catch(() => {});
+  }
+  favShow();
+}
+function favAdvance(){
+  const n = FQ.idx + 1, cur = FQ.list[FQ.idx], nx = FQ.list[n];
+  if (!nx){                                   // all done
+    FQ.audio.pause(); FQ.end = null;
+    const t = $('#fnowt'), s = $('#fnows');
+    if (t){ t.textContent = 'That was every favorite'; s.textContent = 'Tap play to start again from the top'; }
+    document.querySelectorAll('.fcard.on').forEach(c => c.classList.remove('on'));
+    FQ.idx = -1;
+    return;
+  }
+  if (nx.i === cur.i && nx.t <= FQ.end + 0.3){   // the next one starts right where this ends: just keep playing
+    FQ.idx = n; FQ.end = favEnd(nx); favShow(); return;
+  }
+  FQ.audio.pause(); FQ.end = null;
+  FQ.gap = setTimeout(() => favPlay(n), 900);   // a short breath between favorites
+}
+
+/* ---------- Export (small link on the Favorites page) ---------- */
+function backupText(){
+  return JSON.stringify({app: 'dodge-essentials', v: 1, exported: new Date().toISOString(),
+    favs: favs, listened: LISTENED}, null, 1);
+}
+function wireExport(){
+  const b = $('#bkexp'); if (!b) return;
+  b.onclick = async () => {
+    const name = 'Dodge Essentials favorites ' + new Date().toISOString().slice(0, 10) + '.json';
+    const text = backupText();
+    try {
+      const file = new File([text], name, {type: 'application/json'});
+      if (navigator.canShare && navigator.canShare({files: [file]})){ await navigator.share({files: [file], title: name}); return; }
+    } catch(e){ if (e && e.name === 'AbortError') return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], {type: 'application/json'}));
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  };
+}
+
+/* ---------- listened ---------- */
 const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 function showListened(id){
   const b = $('#lbtn'); if (!b) return;
@@ -851,49 +1015,6 @@ function showListened(id){
   b.classList.toggle('on', on);
   b.innerHTML = CHECK_SVG + (on ? 'Listened' : 'Mark as listened');
   b.setAttribute('aria-pressed', String(on));
-}
-function backupText(){
-  return JSON.stringify({app: 'dodge-essentials', v: 1, exported: new Date().toISOString(),
-    favs: favs, listened: LISTENED}, null, 1);
-}
-function importBackup(text){
-  let d;
-  try { d = JSON.parse(text); } catch(e){ return 'That does not look like a backup. Nothing was changed.'; }
-  if (!d || d.app !== 'dodge-essentials') return 'That does not look like a Dodge Essentials backup. Nothing was changed.';
-  const have = new Set(favs.map(f => f.k));
-  let nf = 0, nl = 0;
-  (d.favs || []).forEach(f => { if (f && f.k && byId[f.i] && !have.has(f.k)){ favs.push(f); have.add(f.k); nf++; } });
-  Object.keys(d.listened || {}).forEach(i => { if (byId[i] && !LISTENED[i]){ LISTENED[i] = d.listened[i]; nl++; } });
-  LS.set('de_favs', favs); LS.set('de_listened', LISTENED);
-  return 'Imported ' + plural(nf, 'new favorite') + ' and ' + plural(nl, 'newly listened session') + '.';
-}
-function wireBackup(){
-  const msg = t => { const m = $('#bkmsg'); if (m) m.textContent = t; };
-  $('#bkexp').onclick = () => {
-    const blob = new Blob([backupText()], {type: 'application/json'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'Dodge Essentials backup ' + new Date().toISOString().slice(0, 10) + '.json';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    msg('Backup saved: ' + plural(favs.length, 'favorite') + ', ' + plural(Object.keys(LISTENED).length, 'listened session') + '.');
-  };
-  $('#bkcopy').onclick = () => {
-    const t = backupText();
-    const done = () => msg('Backup copied. Paste it into a note or message to move it to your other device.');
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => {
-      $('#bkpaste').classList.add('on'); $('#bktext').value = t; $('#bktext').select(); msg('Select all and copy the text below.'); });
-    else { $('#bkpaste').classList.add('on'); $('#bktext').value = t; $('#bktext').select(); msg('Select all and copy the text below.'); }
-  };
-  $('#bkimp').onclick = () => $('#bkfile').click();
-  $('#bkfile').onchange = e => {
-    const f = e.target.files && e.target.files[0]; if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => { const m = importBackup(String(rd.result)); favsView(); msg(m); };
-    rd.readAsText(f);
-  };
-  $('#bkpastebtn').onclick = () => { $('#bkpaste').classList.toggle('on'); $('#bktext').value = ''; $('#bktext').focus(); };
-  $('#bkpastego').onclick = () => { const m = importBackup($('#bktext').value); favsView(); msg(m); };
 }
 
 /* ---------- routing ---------- */
