@@ -207,6 +207,21 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 .ftx.sech{font-weight:600}
 .frow{display:flex;align-items:center;gap:10px;margin-top:10px}
 .fdel{font-size:13px;color:var(--muted);padding:6px 4px}
+.lst{color:var(--accent);font-weight:500}
+.lfseg{margin:0 0 4px}
+.lbtn{display:inline-flex;align-items:center;gap:7px;margin:12px 0 0;font-size:13px;font-weight:500;
+  color:var(--accent);padding:7px 14px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--accent)}
+.lbtn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.lbtn.on{background:var(--accent);color:var(--field);box-shadow:none}
+.bk{margin:4px 0 18px;padding:14px 15px;border:1px solid var(--line);border-radius:12px;background:var(--field)}
+.bk p{margin:0 0 10px;font-size:13px;line-height:1.5;color:var(--muted)}
+.bkrow{display:flex;flex-wrap:wrap;gap:8px}
+.bkrow button{font-size:13px;font-weight:500;color:var(--accent);padding:7px 14px;border-radius:999px;background:var(--accq)}
+.bkpaste{display:none;margin-top:10px}
+.bkpaste.on{display:block}
+.bkpaste textarea{width:100%;min-height:90px;border:1px solid var(--line);border-radius:9px;background:var(--bg);
+  color:var(--text);font:13px/1.4 ui-monospace,Menlo,monospace;padding:9px}
+.bkmsg{margin-top:9px;font-size:13px;color:var(--accent);min-height:1em}
 </style>
 </head><body>
 <div class="top"><div class="topin">
@@ -334,6 +349,13 @@ function load(id){
 const POS = LS.get('de_pos', {});
 const savePos = () => LS.set('de_pos', POS);
 const LAST = LS.get('de_last', {});      // recording id -> when it was last played
+let LISTENED = LS.get('de_listened', {}); // recording id -> when it was marked listened
+const BAKED = {"v":1,"favs":[{"k":"43/o/2163.21","i":43,"t":2163.21,"kind":"o","x":"Report back in three days","w":1791200000000},{"k":"43/o/2071.18","i":43,"t":2071.18,"kind":"o","x":"Teach the business they want","w":1791199999000},{"k":"43/o/2026.83","i":43,"t":2026.83,"kind":"o","x":"The thread of light","w":1791199998000},{"k":"43/o/1931.12","i":43,"t":1931.12,"kind":"o","x":"Chosen fate: a three-day practice","w":1791199997000},{"k":"43/o/1760.07","i":43,"t":1760.07,"kind":"o","x":"Retroactive causation","w":1791199996000},{"k":"43/o/1694.45","i":43,"t":1694.45,"kind":"o","x":"The other end of the portal","w":1791199995000},{"k":"43/o/1503.99","i":43,"t":1503.99,"kind":"o","x":"The man at the foot of the bed","w":1791199994000},{"k":"43/o/1442.78","i":43,"t":1442.78,"kind":"o","x":"Just say yes","w":1791199993000},{"k":"43/o/1366.88","i":43,"t":1366.88,"kind":"o","x":"\"The best ride\"","w":1791199992000},{"k":"43/o/1198.68","i":43,"t":1198.68,"kind":"o","x":"The you with a different calendar","w":1791199991000},{"k":"43/o/1296.60","i":43,"t":1296.6,"kind":"o","x":"Sending information back","w":1791199990000},{"k":"43/o/1139.12","i":43,"t":1139.12,"kind":"o","x":"Blow with attention, not breath","w":1791199989000},{"k":"43/o/1036.65","i":43,"t":1036.65,"kind":"o","x":"Visualization: it works out beautifully","w":1791199988000},{"k":"43/o/965.23","i":43,"t":965.23,"kind":"o","x":"Blow on the ember","w":1791199987000},{"k":"43/o/535.13","i":43,"t":535.13,"kind":"o","x":"Watch for repetition","w":1791199986000}],"listened":{}};
+function setListened(id, on){
+  if (on) LISTENED[id] = LISTENED[id] || Date.now(); else delete LISTENED[id];
+  LS.set('de_listened', LISTENED);
+  if (on && POS[id]){ delete POS[id]; savePos(); }
+}
 
 /* ---------- list rows ---------- */
 function rowHTML(r, opts){
@@ -346,7 +368,8 @@ function rowHTML(r, opts){
     (opts.key && r.k ? '<span class="rkey">' + esc(r.k) + '</span>' : '') +
     '<span class="rmeta">' + esc(r.dt) + ' · ' + mins(r.d) +
       (th.length ? ' · ' + esc(th.join(', ')) : '') +
-      (p ? ' · <span class="pin">' + Math.min(99, Math.round(p / r.d * 100)) + '% in</span>' : '') +
+      (LISTENED[r.i] ? ' · <span class="lst">Listened</span>' :
+       p ? ' · <span class="pin">' + Math.min(99, Math.round(p / r.d * 100)) + '% in</span>' : '') +
     '</span></span></button></li>';
 }
 function wireRows(root){
@@ -422,7 +445,7 @@ function fillHome(){
   const q = norm(rawQuery), lib = $('#lib');
   if (q.length >= 2){ lib.innerHTML = searchHTML(q); wireRows(lib); return; }
   let out = '';
-  const recent = Object.keys(POS).map(Number).filter(i => byId[i])
+  const recent = Object.keys(POS).map(Number).filter(i => byId[i] && !LISTENED[i])
     .sort((a, b) => (LAST[b] || 0) - (LAST[a] || 0)).slice(0, 3);
   if (recent.length) out += '<div class="shelf"><h3>Continue listening</h3></div>' +
     '<div class="cont"><ol class="rlist">' + recent.map(i => rowHTML(byId[i])).join('') + '</ol></div>';
@@ -433,13 +456,25 @@ function fillHome(){
         '</span><span class="cnt">' + plural(n, 'session') + '</span></span>' +
         '<span class="bd">' + esc(t.d) + '</span></button>';
     }).join('') + '</div>';
-  out += '<div class="shelf"><h3>Every session</h3><small>oldest first</small></div>';
-  years.forEach((y, yi) => {
-    const items = REC.filter(r => r.y === y);
+  const nL = REC.filter(r => LISTENED[r.i]).length, nU = REC.length - nL;
+  const LF = ['un', 'done', 'all'].includes(LS.get('de_lf', 'un')) ? LS.get('de_lf', 'un') : 'un';
+  const keep = r => LF === 'all' ? true : LF === 'done' ? !!LISTENED[r.i] : !LISTENED[r.i];
+  out += '<div class="shelf"><h3>Every session</h3><small>oldest first</small></div>' +
+    '<div class="subseg lfseg" id="lfseg">' +
+      '<button data-lf="un"' + (LF === 'un' ? ' class="on"' : '') + '>Unlistened · ' + nU + '</button>' +
+      '<button data-lf="done"' + (LF === 'done' ? ' class="on"' : '') + '>Listened · ' + nL + '</button>' +
+      '<button data-lf="all"' + (LF === 'all' ? ' class="on"' : '') + '>All · ' + REC.length + '</button></div>';
+  const shownYears = years.filter(y => REC.some(r => r.y === y && keep(r)));
+  if (!shownYears.length) out += '<p class="empty">' + (LF === 'done' ?
+    'Nothing marked as listened yet. Sessions you play to the end, or mark with the Listened button, show up here.' :
+    'You have listened to every session.') + '</p><div style="height:60px"></div>';
+  shownYears.forEach((y, yi) => {
+    const items = REC.filter(r => r.y === y && keep(r));
     out += '<div class="yr" id="y' + esc(y) + '">' + esc(y) + '<small>' + plural(items.length, 'session') + '</small></div>' +
-      '<ol class="rlist' + (yi === years.length - 1 ? ' last' : '') + '">' + items.map(r => rowHTML(r)).join('') + '</ol>';
+      '<ol class="rlist' + (yi === shownYears.length - 1 ? ' last' : '') + '">' + items.map(r => rowHTML(r)).join('') + '</ol>';
   });
   lib.innerHTML = out;
+  lib.querySelectorAll('[data-lf]').forEach(b => { b.onclick = () => { LS.set('de_lf', b.dataset.lf); fillHome(); }; });
   lib.querySelectorAll('.tile').forEach(t => { t.onclick = () => { location.hash = 't/' + encodeURIComponent(t.dataset.t); }; });
   wireRows(lib);
 }
@@ -489,9 +524,12 @@ function recording(id, at){
   const d = load(id);
   app.innerHTML = '<div class="phead"><h1>' + esc(r.t) + '</h1><p id="psub"></p>' +
     '<div class="chips">' + r.th.map(t => '<button class="chip" data-t="' + esc(t) + '">' + esc(t) + '</button>').join('') + '</div>' +
+    '<button class="lbtn" id="lbtn"></button>' +
     (r.k ? '<div class="bigidea"><b>The big idea</b>' + esc(r.k) + '</div>' : '') +
     '</div><div id="pslot"></div>';
   app.querySelectorAll('.chip').forEach(c => { c.onclick = () => { location.hash = 't/' + encodeURIComponent(c.dataset.t); }; });
+  showListened(r.i);
+  $('#lbtn').onclick = () => { setListened(r.i, !LISTENED[r.i]); showListened(r.i); };
   if (!d){ $('#psub').textContent = 'The transcript for this session is missing.'; return; }
   build(r, d, at);
 }
@@ -556,7 +594,8 @@ function build(r, d, at){
   });
   el.addEventListener('play',  () => { if (live()) setPP(true); });
   el.addEventListener('pause', () => { if (live()){ setPP(false); recordPos(); } });
-  el.addEventListener('ended', () => { if (!live()) return; setPP(false); delete POS[curRec.i]; savePos(); });
+  el.addEventListener('ended', () => { if (!live()) return; setPP(false); delete POS[curRec.i]; savePos();
+    setListened(curRec.i, true); showListened(curRec.i); });
   el.addEventListener('error', () => {
     if (!live()) return;
     const s = $('#psub');
@@ -752,6 +791,13 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) recor
 /* ---------- favorites ---------- */
 const HEART_SVG = '<svg viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21l7.7-7.6 1.1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>';
 let favs = LS.get('de_favs', []);
+/* saved data built into the page: merged in once per version, after that the browser's own copy rules */
+if (BAKED.v && LS.get('de_baked_v', 0) !== BAKED.v){
+  const have = new Set(favs.map(f => f.k));
+  BAKED.favs.forEach(f => { if (!have.has(f.k) && byId[f.i]) favs.push(f); });
+  Object.keys(BAKED.listened).forEach(i => { if (byId[i] && !LISTENED[i]) LISTENED[i] = BAKED.listened[i]; });
+  LS.set('de_favs', favs); LS.set('de_listened', LISTENED); LS.set('de_baked_v', BAKED.v);
+}
 const fkey = (id, t, kind) => id + '/' + kind + '/' + Number(t).toFixed(2);
 const isFav = (id, t, kind) => favs.some(f => f.k === fkey(id, t, kind));
 function toggleFav(id, t, kind, text){
@@ -769,23 +815,85 @@ function favsView(){
   listHash = '#favs';
   setNav('#', 'Home');
   const list = [...favs].sort((a, b) => b.w - a.w);
-  let html = '<div class="fhead"><h1>Favorites</h1></div>';
+  let html = '<div class="fhead"><h1>Favorites</h1></div>' +
+    '<div class="bk"><p>Favorites and listened sessions are saved in this browser only. To carry them to another ' +
+    'device, export a backup here and import it there. Send the backup file to Claude to build them into the page ' +
+    'permanently.</p><div class="bkrow"><button id="bkexp">Export backup</button><button id="bkcopy">Copy as text</button>' +
+    '<button id="bkimp">Import backup file</button><button id="bkpastebtn">Paste backup text</button></div>' +
+    '<input type="file" id="bkfile" accept=".json,application/json,text/plain" hidden>' +
+    '<div class="bkpaste" id="bkpaste"><textarea id="bktext" placeholder="Paste the backup text here"></textarea>' +
+    '<div class="bkrow" style="margin-top:8px"><button id="bkpastego">Import pasted text</button></div></div>' +
+    '<div class="bkmsg" id="bkmsg"></div></div>';
   if (!list.length){
-    app.innerHTML = html + '<div class="note">Nothing saved yet. Tap the heart beside any line in a transcript, or any section in an outline.</div>';
-    return;
+    html += '<div class="note">Nothing saved yet. Tap the heart beside any line in a transcript, or any section in an outline.</div>';
+  } else {
+    html += '<div class="feed">' + list.map(f => {
+      const r = byId[f.i];
+      return '<div class="fcard"><div class="fsrc">' + esc(r ? r.t + ' · ' + r.dt : 'Session ' + f.i) +
+        (f.kind === 'o' ? ' · Outline' : '') + '</div>' +
+        '<div class="ftx' + (f.kind === 'o' ? ' sech' : '') + '">' + esc(f.x) + '</div>' +
+        '<div class="frow"><button class="fts" data-go="' + f.i + '/' + f.t + '">Play from ' + fmt(f.t) +
+        '</button><button class="fdel" data-drop="' + esc(f.k) + '">Remove</button></div></div>';
+    }).join('') + '</div>';
   }
-  html += '<div class="feed">' + list.map(f => {
-    const r = byId[f.i];
-    return '<div class="fcard"><div class="fsrc">' + esc(r ? r.t + ' · ' + r.dt : 'Session ' + f.i) +
-      (f.kind === 'o' ? ' · Outline' : '') + '</div>' +
-      '<div class="ftx' + (f.kind === 'o' ? ' sech' : '') + '">' + esc(f.x) + '</div>' +
-      '<div class="frow"><button class="fts" data-go="' + f.i + '/' + f.t + '">Play from ' + fmt(f.t) +
-      '</button><button class="fdel" data-drop="' + esc(f.k) + '">Remove</button></div></div>';
-  }).join('') + '</div>';
   app.innerHTML = html;
   wireRows(app);
   app.querySelectorAll('[data-drop]').forEach(el => el.onclick = () => {
     favs = favs.filter(f => f.k !== el.dataset.drop); LS.set('de_favs', favs); favsView(); });
+  wireBackup();
+}
+
+/* ---------- listened + backup ---------- */
+const CHECK_SVG = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+function showListened(id){
+  const b = $('#lbtn'); if (!b) return;
+  const on = !!LISTENED[id];
+  b.classList.toggle('on', on);
+  b.innerHTML = CHECK_SVG + (on ? 'Listened' : 'Mark as listened');
+  b.setAttribute('aria-pressed', String(on));
+}
+function backupText(){
+  return JSON.stringify({app: 'dodge-essentials', v: 1, exported: new Date().toISOString(),
+    favs: favs, listened: LISTENED}, null, 1);
+}
+function importBackup(text){
+  let d;
+  try { d = JSON.parse(text); } catch(e){ return 'That does not look like a backup. Nothing was changed.'; }
+  if (!d || d.app !== 'dodge-essentials') return 'That does not look like a Dodge Essentials backup. Nothing was changed.';
+  const have = new Set(favs.map(f => f.k));
+  let nf = 0, nl = 0;
+  (d.favs || []).forEach(f => { if (f && f.k && byId[f.i] && !have.has(f.k)){ favs.push(f); have.add(f.k); nf++; } });
+  Object.keys(d.listened || {}).forEach(i => { if (byId[i] && !LISTENED[i]){ LISTENED[i] = d.listened[i]; nl++; } });
+  LS.set('de_favs', favs); LS.set('de_listened', LISTENED);
+  return 'Imported ' + plural(nf, 'new favorite') + ' and ' + plural(nl, 'newly listened session') + '.';
+}
+function wireBackup(){
+  const msg = t => { const m = $('#bkmsg'); if (m) m.textContent = t; };
+  $('#bkexp').onclick = () => {
+    const blob = new Blob([backupText()], {type: 'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'Dodge Essentials backup ' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    msg('Backup saved: ' + plural(favs.length, 'favorite') + ', ' + plural(Object.keys(LISTENED).length, 'listened session') + '.');
+  };
+  $('#bkcopy').onclick = () => {
+    const t = backupText();
+    const done = () => msg('Backup copied. Paste it into a note or message to move it to your other device.');
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => {
+      $('#bkpaste').classList.add('on'); $('#bktext').value = t; $('#bktext').select(); msg('Select all and copy the text below.'); });
+    else { $('#bkpaste').classList.add('on'); $('#bktext').value = t; $('#bktext').select(); msg('Select all and copy the text below.'); }
+  };
+  $('#bkimp').onclick = () => $('#bkfile').click();
+  $('#bkfile').onchange = e => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => { const m = importBackup(String(rd.result)); favsView(); msg(m); };
+    rd.readAsText(f);
+  };
+  $('#bkpastebtn').onclick = () => { $('#bkpaste').classList.toggle('on'); $('#bktext').value = ''; $('#bktext').focus(); };
+  $('#bkpastego').onclick = () => { const m = importBackup($('#bktext').value); favsView(); msg(m); };
 }
 
 /* ---------- routing ---------- */
